@@ -128,7 +128,11 @@ public class Negin {
 
         try (BufferedReader br = new BufferedReader(new FileReader(collection))) {
             String line;
+            int lineCount = 0;
             while ((line = br.readLine()) != null) {
+                if (++lineCount % 1000 == 0) {
+                    System.out.println(lineCount);
+                }
                 Set<String> seenTerms = new HashSet<>();
                 String[] parts = line.split("\t");
                 String[] terms = parts[1].split(" ");
@@ -172,6 +176,27 @@ public class Negin {
                 }
             }
 
+            // feature_indoc = {k: safe_log(v) + safe_log(document_frequencies['']) - safe_log(document_frequencies[k[0]]) - safe_log(document_frequencies[k[1]]) for k,v in count_indoc.items()}
+            Map<Pair, Double> feature_indoc = new HashMap<>();
+            for (Map.Entry<Pair,Integer> e : count_indoc.entrySet()) {
+                Pair k = e.getKey();
+                Integer v = e.getValue();
+                Double answer = safe_log(v) + safe_log(totalDocumentFrequency) - safe_log(document_frequencies.get(k.first)) - safe_log(document_frequencies.get(k.second));
+                feature_indoc.put(k, answer);
+            }
+
+            // features_unordered_gap = {k: [safe_log(count) + safe_log(collection_frequencies['']) - safe_log(collection_frequencies[k[0]]) - safe_log(collection_frequencies[k[1]]) for count in v] for k,v in counts_unordered_gap.items()}
+            Map<Pair, List<Double>> features_unordered_gap = new HashMap<>();
+            for (Map.Entry<Pair,Integer[]> e : counts_unordered_gap.entrySet()) {
+                Pair k = e.getKey();
+                Integer[] v = e.getValue();
+                List<Double> answers = new ArrayList<>();
+                for (int tempIndex = 0; tempIndex < v.length; ++tempIndex) {
+                    Double answer = safe_log(v[tempIndex]) + safe_log(totalCollectionFrequency) - safe_log(collection_frequencies.get(k.first)) - safe_log(collection_frequencies.get(k.second));
+                    answers.add(answer);
+                }
+                features_unordered_gap.put(k, answers);
+            }
             System.out.println("totalCollectionFrequency: "  + totalCollectionFrequency);
             System.out.println("totalDocumentFrequency: "  + totalDocumentFrequency);
 
@@ -186,6 +211,30 @@ public class Negin {
             }
         } catch (IOException e) {
             e.printStackTrace();
+        }
+    }
+
+    Double safe_log (Integer x) {
+        if (x == 0)
+            return 0.0;
+        return Math.log(x);
+    }
+    void printMap(Map<Pair,Integer[]> m) {
+        for (Map.Entry e : m.entrySet()) {
+            System.out.println(e.getKey());
+            Integer[] ea = (Integer[]) e.getValue();
+            System.out.print("[");
+            for (int tempx = 0; tempx < ea.length; ++tempx) {
+                System.out.print(ea[tempx] + " ");
+            }
+            System.out.println("]");
+        }
+    }
+
+    void printSimpleMap(Map<Pair,Integer> m) {
+        for (Map.Entry e : m.entrySet()) {
+            System.out.print(e.getKey());
+            System.out.println(" : " + e.getValue());
         }
     }
 
