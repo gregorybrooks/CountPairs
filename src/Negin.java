@@ -11,13 +11,33 @@ import static java.lang.Math.abs;
 
 public class Negin {
     Map<Pair, Stats> master = new HashMap<>();
-    enum StatTypes { counts_unordered_gap, counts_ordered_gap, counts_unordered_inwindow}
+    enum StatTypes { counts_unordered_gap, counts_ordered_gap, counts_unordered_inwindow, count_indoc}
+    int max_half_window;
 
     class Stats {
         Integer count_indoc;
         Integer[] counts_unordered_gap;
         Integer[] counts_ordered_gap;
         Integer[] counts_unordered_inwindow;
+        Stats() {
+            this.count_indoc = 0;
+
+            int arraySize = max_half_window * 2 + 1;
+            Integer[] largeArray = new Integer[arraySize];
+            for (int tempx = 0; tempx < arraySize; ++tempx) {
+                largeArray[tempx] = 0;
+            }
+
+            arraySize = max_half_window + 1;
+            Integer[] smallArray = new Integer[arraySize];
+            for (int tempx = 0; tempx < arraySize; ++tempx) {
+                smallArray[tempx] = 0;
+            }
+
+            this.counts_ordered_gap = largeArray;
+            this.counts_unordered_gap = smallArray;
+            this.counts_unordered_inwindow = smallArray;
+        }
     }
 
     private class Pair {
@@ -34,6 +54,19 @@ public class Negin {
                     "first='" + first + '\'' +
                     ", second='" + second + '\'' +
                     '}';
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            Pair pair = (Pair) o;
+            return Objects.equals(first, pair.first) && Objects.equals(second, pair.second);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(first, second);
         }
     }
 
@@ -58,52 +91,38 @@ public class Negin {
         }
     }
 
-    void bumpArrayCounter(String curr_term, String neighbor_term, int array_size, int index, StatTypes statName) {
+    void bumpArrayCounter(String curr_term, String neighbor_term, int index, StatTypes statName) {
         Pair pair = new Pair(curr_term, neighbor_term);
+        Stats stats;
         if (master.containsKey(pair)) {
-            Stats stats = master.get(pair);
-            if (statName == StatTypes.counts_unordered_gap) {
-                stats.counts_unordered_gap[index] += 1;
-            } else if (statName == StatTypes.counts_ordered_gap) {
-                stats.counts_ordered_gap[index] += 1;
-            } else if (statName == StatTypes.counts_unordered_inwindow) {
-                stats.counts_unordered_inwindow[index] += 1;
-            }
+            stats = master.get(pair);
         } else {
-            Integer[] y = new Integer[array_size+1];
-            for (int tempx = 0; tempx < array_size; ++tempx) {
-                y[tempx] = 0;
-            }
-            Stats stats = new Stats();
-            stats.counts_unordered_gap = y;
-            stats.counts_ordered_gap = y;
-            stats.counts_unordered_inwindow = y;
-            y[index] = 1;
-            if (statName.equals("counts_unordered_gap")) {
-                stats.counts_unordered_gap = y;
-            } else if (statName.equals("counts_ordered_gap")) {
-                stats.counts_ordered_gap = y;
-            } else if (statName.equals("counts_unordered_inwindow")) {
-                stats.counts_unordered_inwindow = y;
-            }
-            master.put(pair, stats);
+            stats = new Stats();
         }
+        switch (statName) {
+            case counts_unordered_gap:
+                stats.counts_unordered_gap[index] += 1;
+                break;
+            case counts_ordered_gap:
+                stats.counts_ordered_gap[index] += 1;
+                break;
+            case counts_unordered_inwindow:
+                stats.counts_unordered_inwindow[index] += 1;
+                break;
+            case count_indoc:
+                stats.count_indoc += 1;
+                break;
+        }
+        master.put(pair, stats);
     }
 
 
     void featurize(String collection, int max_half_window) throws FileNotFoundException {
 
+        this.max_half_window = max_half_window;
+
         Map<String, Integer> document_frequencies = new HashMap<>();
-        //collection_frequencies = defaultdict(int)
         Map<String,Integer> collection_frequencies = new HashMap<>();
-        //count_indoc = defaultdict(int)
-        Map<Pair,Integer> count_indoc = new HashMap<>();
-        //counts_unordered_gap = defaultdict(lambda: [0 for i in range(max_half_window+1)])
-        Map<Pair, Integer[]> counts_unordered_gap = new HashMap<>();
-        //counts_ordered_gap = defaultdict(lambda: [0 for i in range(max_half_window*2+1)])
-        Map<Pair, Integer[]> counts_ordered_gap = new HashMap<>();
-        //counts_unordered_inwindow = defaultdict(lambda: [0 for i in range(max_half_window+1)])
-        Map<Pair, Integer[]> counts_unordered_inwindow = new HashMap<>();
         int totalDocumentFrequency = 0;
         int totalCollectionFrequency = 0;
 
@@ -114,49 +133,57 @@ public class Negin {
                 String[] parts = line.split("\t");
                 String[] terms = parts[1].split(" ");
                 int numTerms = terms.length;
+
                 totalDocumentFrequency += 1;
+
                 for (int i = 0; i < numTerms; ++i) {
                     String curr_term = terms[i];
+
                     bumpCounter(collection_frequencies, curr_term);
+
                     ++totalCollectionFrequency;
+
                     if (!seenTerms.contains(curr_term)) {
                         bumpCounter(document_frequencies, curr_term);
                         seenTerms.add(curr_term);
                     }
-                    for (int j = Integer.max(0, i-max_half_window); j < Integer.min(numTerms, i+max_half_window+1); ++j) {
 
+                    for (int j = Integer.max(0, i-max_half_window); j < Integer.min(numTerms, i+max_half_window+1); ++j) {
                         String neighbor_term = terms[j];
                         int delta = i - j;
                         int abs_delta = abs(delta);
 
-                        bumpArrayCounter(curr_term, neighbor_term, max_half_window, abs_delta, "counts_unordered_gap");
+                        bumpArrayCounter(curr_term, neighbor_term, abs_delta, StatTypes.counts_unordered_gap);
 
                         if (delta >= 0) {
-                            bumpArrayCounter(curr_term, neighbor_term, max_half_window*2, delta, counts_ordered_gap);
+                            bumpArrayCounter(curr_term, neighbor_term, delta, StatTypes.counts_ordered_gap);
                         } else {
-                            bumpArrayCounter(curr_term, neighbor_term, max_half_window, max_half_window + delta, counts_ordered_gap);
+                            bumpArrayCounter(curr_term, neighbor_term, max_half_window + delta, StatTypes.counts_ordered_gap);
                         }
                         for (int k = abs_delta; k < max_half_window+1; ++k) {
-                            bumpArrayCounter(curr_term, neighbor_term, max_half_window, k, counts_unordered_inwindow);
+                            bumpArrayCounter(curr_term, neighbor_term, k, StatTypes.counts_unordered_inwindow);
                         }
-
                     }
-
                 }
                 for (String term1 : seenTerms) {
                     for (String term2 : seenTerms) {
-                        bumpPairCounter(term1, term2, count_indoc);
+                        bumpArrayCounter(term1, term2, -1, StatTypes.count_indoc);
                     }
                 }
             }
+
             System.out.println("totalCollectionFrequency: "  + totalCollectionFrequency);
             System.out.println("totalDocumentFrequency: "  + totalDocumentFrequency);
-            for (Map.Entry e : counts_unordered_gap.entrySet()) {
-                System.out.println(e.getKey());
-                Integer[] ea = (Integer[]) e.getValue();
-                System.out.println(ea);
+
+            for (Map.Entry<Pair, Stats> e : master.entrySet()) {
+                Stats stats = e.getValue();
+                Pair pair = e.getKey();
+                System.out.println(pair.first + " / " + pair.second);
+                Integer[] unordered = stats.counts_unordered_gap;
+                Integer[] ordered = stats.counts_ordered_gap;
+                Integer[] inwindow = stats.counts_unordered_inwindow;
+                System.out.println(String.format("count_indoc: %d", stats.count_indoc));
             }
-            System.out.println(counts_unordered_gap);
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -165,7 +192,7 @@ public class Negin {
     public static void main (String[] args) {
        Negin n = new Negin();
        try {
-           n.featurize("/u02/negin/JavaVersion/smaller.tsv", 3);
+           n.featurize("/u02/negin/shared/collectione-tokenized.tsv", 5);
        } catch (IOException e) {
            e.printStackTrace();
        }
