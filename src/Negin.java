@@ -11,6 +11,7 @@ import static java.lang.Math.abs;
 
 public class Negin {
     Map<Pair, Stats> master = new HashMap<>();
+    enum StatTypes { counts_unordered_gap, counts_ordered_gap, counts_unordered_inwindow}
 
     class Stats {
         Integer count_indoc;
@@ -57,15 +58,15 @@ public class Negin {
         }
     }
 
-    void bumpArrayCounter(String curr_term, String neighbor_term, int array_size, int index, String statName) {
+    void bumpArrayCounter(String curr_term, String neighbor_term, int array_size, int index, StatTypes statName) {
         Pair pair = new Pair(curr_term, neighbor_term);
         if (master.containsKey(pair)) {
             Stats stats = master.get(pair);
-            if (statName.equals("counts_unordered_gap")) {
+            if (statName == StatTypes.counts_unordered_gap) {
                 stats.counts_unordered_gap[index] += 1;
-            } else if (statName.equals("counts_ordered_gap")) {
+            } else if (statName == StatTypes.counts_ordered_gap) {
                 stats.counts_ordered_gap[index] += 1;
-            } else if (statName.equals("counts_unordered_inwindow")) {
+            } else if (statName == StatTypes.counts_unordered_inwindow) {
                 stats.counts_unordered_inwindow[index] += 1;
             }
         } else {
