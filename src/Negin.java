@@ -93,11 +93,13 @@ public class Negin {
 
     void bumpArrayCounter(String curr_term, String neighbor_term, int index, StatTypes statName) {
         Pair pair = new Pair(curr_term, neighbor_term);
+        boolean created = false;
         Stats stats;
         if (master.containsKey(pair)) {
             stats = master.get(pair);
         } else {
             stats = new Stats();
+            created = true;
         }
         switch (statName) {
             case counts_unordered_gap:
@@ -113,7 +115,9 @@ public class Negin {
                 stats.count_indoc += 1;
                 break;
         }
-        master.put(pair, stats);
+        if (created) {
+            master.put(pair, stats);
+        }
     }
 
 
@@ -178,35 +182,69 @@ public class Negin {
 
             // feature_indoc = {k: safe_log(v) + safe_log(document_frequencies['']) - safe_log(document_frequencies[k[0]]) - safe_log(document_frequencies[k[1]]) for k,v in count_indoc.items()}
             Map<Pair, Double> feature_indoc = new HashMap<>();
-            for (Map.Entry<Pair,Integer> e : count_indoc.entrySet()) {
+            for (Map.Entry<Pair, Stats> e : master.entrySet()) {
+                Stats stats = e.getValue();
                 Pair k = e.getKey();
-                Integer v = e.getValue();
+                Integer v = stats.count_indoc;
                 Double answer = safe_log(v) + safe_log(totalDocumentFrequency) - safe_log(document_frequencies.get(k.first)) - safe_log(document_frequencies.get(k.second));
                 feature_indoc.put(k, answer);
             }
 
             // features_unordered_gap = {k: [safe_log(count) + safe_log(collection_frequencies['']) - safe_log(collection_frequencies[k[0]]) - safe_log(collection_frequencies[k[1]]) for count in v] for k,v in counts_unordered_gap.items()}
             Map<Pair, List<Double>> features_unordered_gap = new HashMap<>();
-            for (Map.Entry<Pair,Integer[]> e : counts_unordered_gap.entrySet()) {
+            for (Map.Entry<Pair, Stats> e : master.entrySet()) {
+                Stats stats = e.getValue();
                 Pair k = e.getKey();
-                Integer[] v = e.getValue();
+                Integer[] v = stats.counts_unordered_gap;
                 List<Double> answers = new ArrayList<>();
                 for (int tempIndex = 0; tempIndex < v.length; ++tempIndex) {
-                    Double answer = safe_log(v[tempIndex]) + safe_log(totalCollectionFrequency) - safe_log(collection_frequencies.get(k.first)) - safe_log(collection_frequencies.get(k.second));
+                    Double answer = safe_log(v[tempIndex]) + safe_log(totalCollectionFrequency)
+                            - safe_log(collection_frequencies.get(k.first)) - safe_log(collection_frequencies.get(k.second));
                     answers.add(answer);
                 }
                 features_unordered_gap.put(k, answers);
             }
+
+            Map<Pair, List<Double>> features_ordered_gap = new HashMap<>();
+            for (Map.Entry<Pair, Stats> e : master.entrySet()) {
+                Stats stats = e.getValue();
+                Pair k = e.getKey();
+                Integer[] v = stats.counts_ordered_gap;
+                List<Double> answers = new ArrayList<>();
+                for (int tempIndex = 0; tempIndex < v.length; ++tempIndex) {
+                    Double answer = safe_log(v[tempIndex]) + safe_log(totalCollectionFrequency)
+                            - safe_log(collection_frequencies.get(k.first)) - safe_log(collection_frequencies.get(k.second));
+                    answers.add(answer);
+                }
+                features_ordered_gap.put(k, answers);
+            }
+
+            Map<Pair, List<Double>> features_unordered_inwindow = new HashMap<>();
+            for (Map.Entry<Pair, Stats> e : master.entrySet()) {
+                Stats stats = e.getValue();
+                Pair k = e.getKey();
+                Integer[] v = stats.counts_unordered_inwindow;
+                List<Double> answers = new ArrayList<>();
+                for (int tempIndex = 0; tempIndex < v.length; ++tempIndex) {
+                    Double answer = safe_log(v[tempIndex]) + safe_log(totalCollectionFrequency)
+                            - safe_log(collection_frequencies.get(k.first)) - safe_log(collection_frequencies.get(k.second))
+                                                        - safe_log(tempIndex*2+1);
+                    answers.add(answer);
+                }
+                features_ordered_gap.put(k, answers);
+            }
+
             System.out.println("totalCollectionFrequency: "  + totalCollectionFrequency);
             System.out.println("totalDocumentFrequency: "  + totalDocumentFrequency);
 
             for (Map.Entry<Pair, Stats> e : master.entrySet()) {
                 Stats stats = e.getValue();
                 Pair pair = e.getKey();
+                System.out.println("*********************");
                 System.out.println(pair.first + " / " + pair.second);
-                Integer[] unordered = stats.counts_unordered_gap;
-                Integer[] ordered = stats.counts_ordered_gap;
-                Integer[] inwindow = stats.counts_unordered_inwindow;
+                printVector("counts_unordered_gap", stats.counts_unordered_gap);
+                printVector("counts_ordered_gap", stats.counts_ordered_gap);
+                printVector("counts_unordered_inwindow", stats.counts_unordered_inwindow);
                 System.out.println(String.format("count_indoc: %d", stats.count_indoc));
             }
         } catch (IOException e) {
@@ -219,16 +257,14 @@ public class Negin {
             return 0.0;
         return Math.log(x);
     }
-    void printMap(Map<Pair,Integer[]> m) {
-        for (Map.Entry e : m.entrySet()) {
-            System.out.println(e.getKey());
-            Integer[] ea = (Integer[]) e.getValue();
-            System.out.print("[");
-            for (int tempx = 0; tempx < ea.length; ++tempx) {
-                System.out.print(ea[tempx] + " ");
-            }
-            System.out.println("]");
+
+    void printVector(String header, Integer[] ea) {
+        System.out.println(header + ":");
+        System.out.print("[");
+        for (int tempx = 0; tempx < ea.length; ++tempx) {
+            System.out.print(ea[tempx] + " ");
         }
+        System.out.println("]");
     }
 
     void printSimpleMap(Map<Pair,Integer> m) {
@@ -242,6 +278,7 @@ public class Negin {
        Negin n = new Negin();
        try {
            n.featurize("/u02/negin/shared/collectione-tokenized.tsv", 5);
+//           n.featurize("/u02/negin/shared/smaller.tsv", 5);
        } catch (IOException e) {
            e.printStackTrace();
        }
