@@ -11,12 +11,15 @@ public class Derby {
     Statement termStmt;
     ResultSet termRs = null;
     int rowCount = 0;
+    PreparedStatement ps;
 
     public void connect() {
         try {
             conn = DriverManager.getConnection
                     ("jdbc:derby:/u02/derby_data");
             conn.setAutoCommit(false);
+
+
 
         } catch (SQLException ex) {
             System.out.println("in connection" + ex);
@@ -34,7 +37,7 @@ public class Derby {
                 ;
             }
 
-            dropSQL = "drop table pair_stats";
+            dropSQL = "drop table counts_ordered_gap";
             try {
                 stmt.execute(dropSQL);
                 conn.commit();
@@ -66,29 +69,12 @@ public class Derby {
                 ;
             }
 
-            String createSQL = "create table pair_stats (first_term varchar(100), second_term varchar(100), " +
-                "           count_indoc int, " +
-                "           counts_unordered_gap0 int default 0,  " +
-                "           counts_unordered_gap1 int default 0,  " +
-                "           counts_unordered_gap2 int default 0, " +
-                "           counts_unordered_gap3 int default 0," +
-                "           counts_unordered_gap4 int default 0," +
-                "           counts_unordered_gap5 int default 0," +
-                "           counts_ordered_gap0 int default 0,  " +
-                "           counts_ordered_gap1 int default 0,  " +
-                "           counts_ordered_gap2 int default 0, " +
-                "           counts_ordered_gap3 int default 0," +
-                "           counts_ordered_gap4 int default 0," +
-                "           counts_ordered_gap5 int default 0," +
-                "           counts_unordered_inwindow0 int default 0,  " +
-                "           counts_unordered_inwindow1 int default 0,  " +
-                "           counts_unordered_inwindow2 int default 0, " +
-                "           counts_unordered_inwindow3 int default 0," +
-                "           counts_unordered_inwindow4 int default 0," +
-                "           counts_unordered_inwindow5 int default 0," +
-                    "primary key(first_term, second_term))";
+            String createSQL = "create table counts_ordered_gap (first_term varchar(100), second_term varchar(100), " +
+                "           index int) ";
 
             stmt.execute(createSQL);
+            ps = conn.prepareStatement(
+                    "insert into counts_ordered_gap (first_term, second_term, index) values (?,?,?)");
             conn.commit();
 
             createSQL = "create table term_stats (term varchar(100), collection_frequency int default 0, document_frequency int default 0, primary key (term))";
@@ -232,14 +218,16 @@ public class Derby {
         }
     }
 
-    public void addPairStat(String first_term, String second_term, int index, Long count, Negin.StatTypes type) {
+    public void addPairStat(Negin.PairStat pairStat) {
         try {
-            Statement stmt = conn.createStatement();
-            String statement;
-            statement = "insert into pair_stats (first_term, second_term, index, type, frequency) values ('" + first_term
-                        + "', '" + second_term + "', " + index + ", '" + type.toString() + "', "
-                        + count + ")";
-            stmt.execute(statement);
+            ps.setString(1, pairStat.first_term);
+            ps.setString(2, pairStat.second_term);
+            ps.setInt(3, pairStat.index);
+            ps.execute();
+            if (++rowCount % 5000 == 0) {
+//                System.out.println("At " + rowCount);
+                conn.commit();
+            }
         } catch (SQLException ex) {
             throw new AppException("in connection" + ex);
         }
