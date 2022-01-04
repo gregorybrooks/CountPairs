@@ -7,7 +7,7 @@ import java.util.*;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Stream;
 
 import static java.lang.Math.abs;
@@ -146,6 +146,89 @@ public class MakeCountFiles {
             e.printStackTrace();
         }
 
+        pw.close();
+    }
+
+    void bumpCounter(Map<String,Integer> m, String term) {
+        if (m.containsKey(term)) {
+            int count = m.get(term);
+            m.put(term, count + 1);
+        } else {
+            m.put(term, 1);
+        }
+    }
+
+    void gatherFrequencyStats(String collection, String type) {
+        System.out.println("Doing " + type);
+
+        AtomicInteger totalCollectionFrequency = new AtomicInteger();
+        AtomicInteger totalDocumentFrequency = new AtomicInteger();
+        Map<String,Integer> collection_frequencies = new HashMap<>();
+        Map<String,Integer> document_frequencies = new HashMap<>();
+        try (Stream<String> strm = Files.lines(Paths.get(collection)).parallel()) {
+            strm.forEach(line -> {
+                Set<String> seenTerms = new HashSet<>();
+                String[] parts = line.split("\t");
+                String[] terms = parts[1].split("[$«~¡¢£¤¥§©ª¬®°±³´µ¶·¹º»¼¿×æðø`&:!;\\-{} .,/()¦|'\"]+");
+
+        /* java's split() leaves an empty first array element if the sentence happens to start with one of the delimiters.
+           Remove it so we don't include pairs with the empty string. */
+                if (terms[0].length() == 0) {
+                    terms = Arrays.copyOfRange(terms, 1, terms.length);
+                }
+                int numTerms = terms.length;
+                totalDocumentFrequency.incrementAndGet();
+                for (int i = 0; i < numTerms; ++i) {
+                    String curr_term = terms[i];
+                    if (curr_term.length() == 0) {
+                        continue;
+                    }
+                    bumpCounter(collection_frequencies, curr_term);
+                    totalCollectionFrequency.incrementAndGet();
+
+                    if (!seenTerms.contains(curr_term)) {
+                        bumpCounter(document_frequencies, curr_term);
+                        seenTerms.add(curr_term);
+                    }
+                }
+            });
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        // Now write out the selected frequency stats
+        PrintWriter pw = null;
+        try {
+            pw = new PrintWriter(Files.newBufferedWriter(
+                    Paths.get(collection + ".collection_frequencies.csv")));
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        for (Map.Entry<String,Integer> e : collection_frequencies.entrySet()) {
+            String outputLine = doubleQuote + e.getKey() + doubleQuote + delimiter + e.getValue();
+            pw.println(outputLine);
+        }
+        pw.close();
+
+        try {
+            pw = new PrintWriter(Files.newBufferedWriter(
+                    Paths.get(collection + ".document_frequencies.csv")));
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        for (Map.Entry<String,Integer> e : document_frequencies.entrySet()) {
+            String outputLine = doubleQuote + e.getKey() + doubleQuote + delimiter + e.getValue();
+            pw.println(outputLine);
+        }
+        pw.close();
+
+        try {
+            pw = new PrintWriter(Files.newBufferedWriter(
+                    Paths.get(collection + ".total_frequencies.csv")));
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        pw.println("totalCollectionFrequency" + "," + totalCollectionFrequency);
+        pw.println("totalDocumentFrequency" + "," + totalDocumentFrequency);
         pw.close();
     }
 }
