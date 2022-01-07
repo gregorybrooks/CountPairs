@@ -64,9 +64,9 @@ public class MakeCountFiles {
                             pairStats.add(outputLine);
                         }
                     } else {
-                        if (max_half_window + delta != 0) {
+                        if (max_half_window + abs_delta != 0) {
                             outputLine = doubleQuote + curr_term + doubleQuote + delimiter + doubleQuote + neighbor_term + doubleQuote
-                                    + delimiter + (max_half_window + delta);
+                                    + delimiter + (max_half_window + abs_delta);
                             pairStats.add(outputLine);
                         }
                     }
