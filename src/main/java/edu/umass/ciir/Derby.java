@@ -1,8 +1,107 @@
 package edu.umass.ciir;
 import java.sql.*;
+import java.util.Objects;
 //import org.apache.derby.jdbc.EmbeddedDriver;
 
 public class Derby {
+    enum StatTypes { counts_unordered_gap, counts_ordered_gap, counts_unordered_inwindow, count_indoc,
+        document_frequencies, collection_frequencies, total_collection_term_instances, total_documents}
+
+    class TermStat {
+        String term;
+        String type;
+        TermStat(String term, String type) {
+            this.term = term;
+            this.type = type;
+        }
+        String getType() {
+            return type;
+        }
+        String getKey() {
+            return type + term;
+        }
+        String getTerm() {
+            return term;
+        }
+    }
+
+    class Pair {
+        String first_term;
+        String second_term;
+
+        public Pair(String first_term, String second_term) {
+            this.first_term = first_term;
+            this.second_term = second_term;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            Pair pair = (Pair) o;
+            return first_term.equals(pair.first_term) && second_term.equals(pair.second_term);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(first_term, second_term);
+        }
+    }
+
+    class PairStatKey {
+        Pair pair;
+        String type;
+        int index;
+
+        public PairStatKey(Pair pair, String type, int index) {
+            this.pair = pair;
+            this.type = type;
+            this.index = index;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            PairStatKey that = (PairStatKey) o;
+            return index == that.index && pair.equals(that.pair) && type.equals(that.type);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(pair, type, index);
+        }
+    }
+
+    class PairStat {
+        String first_term;
+        String second_term;
+        int index;
+        PairStat(String first_term, String second_term) {
+            this.first_term = first_term;
+            this.second_term = second_term;
+            this.index = -1;
+        }
+        PairStat(String first_term, String second_term, int index) {
+            this.first_term = first_term;
+            this.second_term = second_term;
+            this.index = index;
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            PairStat pairStat = (PairStat) o;
+            return index == pairStat.index && first_term.equals(pairStat.first_term) && second_term.equals(pairStat.second_term);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(first_term, second_term, index);
+        }
+    }
+
     Connection conn = null;
     Statement pairStmt;
     ResultSet pairRs = null;
@@ -136,7 +235,7 @@ public class Derby {
         }
     }
 
-    public void bumpPairStat(String first, String second, int index, edu.umass.ciir.Negin.StatTypes statType) {
+    public void bumpPairStat(String first, String second, int index, StatTypes statType) {
         try {
             Statement stmt = conn.createStatement();
             ResultSet rs = stmt.executeQuery("select * from pair_stats where first_term = '" + first + "' and second_term = '" + second + "'");
@@ -145,10 +244,10 @@ public class Derby {
                 stmt.execute(statement);
             }
             String statement;
-            if (statType == edu.umass.ciir.Negin.StatTypes.count_indoc) {
+            if (statType == StatTypes.count_indoc) {
                 statement = "update pair_stats set count_indoc = count_indoc + 1 where first_term = '" + first + "' and second_term = '" + second + "'";
-            } else if (statType == Negin.StatTypes.counts_ordered_gap || statType == Negin.StatTypes.counts_unordered_gap
-                   || statType == Negin.StatTypes.counts_unordered_inwindow) {
+            } else if (statType == StatTypes.counts_ordered_gap || statType == StatTypes.counts_unordered_gap
+                   || statType == StatTypes.counts_unordered_inwindow) {
                 String statName = statType.toString() + index;
                 statement = "update pair_stats set " + statName + " = " + statName + " + 1 where first_term = '" + first + "' and second_term = '" + second + "'";
             } else {
@@ -163,16 +262,16 @@ public class Derby {
         }
     }
 
-    public void bumpTermStat(String term, edu.umass.ciir.Negin.StatTypes statType) {
+    public void bumpTermStat(String term, StatTypes statType) {
         try {
             Statement stmt = conn.createStatement();
             ResultSet rs = stmt.executeQuery("select * from term_stats where term = '" + term + "'");
             if (!rs.next()) {
                 int collection_value = 0;
                 int document_value = 0;
-                if (statType == edu.umass.ciir.Negin.StatTypes.collection_frequencies) {
+                if (statType == StatTypes.collection_frequencies) {
                     collection_value = 1;
-                } else if (statType == edu.umass.ciir.Negin.StatTypes.document_frequencies){
+                } else if (statType == StatTypes.document_frequencies){
                     document_value = 1;
                 } else {
                     throw new AppException("Invalid stat type: " + statType.toString());
@@ -182,9 +281,9 @@ public class Derby {
                 stmt.execute(statement);
             } else {
                 String statement;
-                if (statType == edu.umass.ciir.Negin.StatTypes.document_frequencies) {
+                if (statType == StatTypes.document_frequencies) {
                     statement = "update term_stats set document_frequency = document_frequency + 1 " + "where term = '" + term + "'";
-                } else if (statType == edu.umass.ciir.Negin.StatTypes.collection_frequencies) {
+                } else if (statType == StatTypes.collection_frequencies) {
                     statement = "update term_stats set collection_frequency = collection_frequency + 1 " + "where term = '" + term + "'";
                 } else {
                     throw new AppException("Invalid stat type: " + statType.toString());
@@ -199,14 +298,14 @@ public class Derby {
         }
     }
 
-    public void addFrequencyStat(String term, Long count, Negin.StatTypes type) {
+    public void addFrequencyStat(String term, Long count, StatTypes type) {
         try {
             Statement stmt = conn.createStatement();
             String statement;
-            if (type == Negin.StatTypes.collection_frequencies) {
+            if (type == StatTypes.collection_frequencies) {
                 statement = "insert into frequencies (term, type, frequency) values ('" + term + "', 'collection', "
                         + count + ")";
-            } else if (type == Negin.StatTypes.document_frequencies) {
+            } else if (type == StatTypes.document_frequencies) {
                 statement = "insert into frequencies (term, type, frequency) values ('" + term + "', 'document', "
                         + count + ")";
             } else {
@@ -218,7 +317,7 @@ public class Derby {
         }
     }
 
-    public void addPairStat(Negin.PairStat pairStat) {
+    public void addPairStat(PairStat pairStat) {
         try {
             ps.setString(1, pairStat.first_term);
             ps.setString(2, pairStat.second_term);
@@ -233,13 +332,13 @@ public class Derby {
         }
     }
 
-    public void setGlobalStat(edu.umass.ciir.Negin.StatTypes statType, int value) {
+    public void setGlobalStat(StatTypes statType, int value) {
         try {
             Statement stmt = conn.createStatement();
             String statement;
-            if (statType == Negin.StatTypes.total_collection_term_instances) {
+            if (statType == StatTypes.total_collection_term_instances) {
                 statement = "update global_stats set total_collection_term_instances = " + value;
-            } else if (statType == edu.umass.ciir.Negin.StatTypes.total_documents){
+            } else if (statType == StatTypes.total_documents){
                 statement = "update global_stats set total_documents = " + value;
             } else {
                 throw new AppException("Invalid stat type: " + statType.toString());
