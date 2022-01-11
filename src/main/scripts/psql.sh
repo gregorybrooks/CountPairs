@@ -1,0 +1,1 @@
+docker run -it --rm --network postgres-network -v /mnt/scratch/glbrooks/negin:/scripts -v /mnt/scratch/glbrooks/negin/data:/data -e PGPASSWORD=postgres ubuntu/postgres psql -h postgres-container -U postgres -f $1

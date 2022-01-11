@@ -26,11 +26,9 @@ public class MakeFeatureFiles {
         List<String> type = Arrays.asList("counts_ordered_gap");
         for (String f : type) {
             /* ...execute the task to run concurrently as a runnable: */
-            exec.execute(new Runnable() {
-                public void run() {
-                    System.out.println("Running " + type + " in thread: " + Thread.currentThread());
-                    doOneType(collection, f);
-                }
+            exec.execute(() -> {
+                System.out.println("Running " + type + " in thread: " + Thread.currentThread());
+                doOneType(collection, f);
             });
         }
         /* Tell the executor that after these steps above, we will be done: */
@@ -41,7 +39,7 @@ public class MakeFeatureFiles {
             boolean b = exec.awaitTermination(36, TimeUnit.HOURS);
             /* If the execution timed out, false is returned: */
             if (b) {
-                System.out.println("All done");
+                System.out.println("All tasks are finished");
             } else {
                 System.out.println("TIME-OUT OCCURRED! PROCESSING IS INCOMPLETE!");
             }
@@ -54,12 +52,53 @@ public class MakeFeatureFiles {
         return Math.log(x);
     }
 
-    int getTotalCollectionFrequency() {
-        return 574008398;
+    /*
+            totalCollectionFrequency,574008398
+        totalDocumentFrequency,8841823
+
+     */
+    int getTotalCollectionFrequency(String collection) {
+        int ret = 0;
+        try {
+            String fname = collection + ".total_frequencies.csv";
+            Reader in = new FileReader(fname);
+            Iterable<CSVRecord> records = CSVFormat.RFC4180.parse(in);
+            for (CSVRecord record : records) {
+                String type = record.get(0);
+                int count = Integer.parseInt(record.get(1));
+                if (type.equals("totalCollectionFrequency")) {
+                    ret = count;
+                }
+            }
+            if (ret == 0) {
+                throw new IllegalArgumentException("totalCollectionFrequency not found in " + fname);
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return ret;
     }
 
-    int getTotalDocumentFrequency() {
-        return 8841823;
+    int getTotalDocumentFrequency(String collection) {
+        int ret = 0;
+        try {
+            String fname = collection + ".total_frequencies.csv";
+            Reader in = new FileReader(fname);
+            Iterable<CSVRecord> records = CSVFormat.RFC4180.parse(in);
+            for (CSVRecord record : records) {
+                String type = record.get(0);
+                int count = Integer.parseInt(record.get(1));
+                if (type.equals("totalDocumentFrequency")) {
+                    ret = count;
+                }
+            }
+            if (ret == 0) {
+                throw new IllegalArgumentException("totalDocumentFrequency not found in " + fname);
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return ret;
     }
 
     Map<String,Integer> getDocumentFrequencies(String collection) {
@@ -97,31 +136,32 @@ public class MakeFeatureFiles {
     void doOneType(String collection, String type) {
         System.out.println("Doing " + type);
 
-        String infile = collection + "." + type + ".grouped.csv";
+        String inputFile = collection + "." + type + ".grouped.csv";
+        String outputFile = collection + "." + type + ".features.csv";
 
-        PrintWriter pw = null;
+        PrintWriter pw;
         try {
-            pw = new PrintWriter(Files.newBufferedWriter(
-                    Paths.get(collection + "." + type + ".features.csv")));
+            pw = new PrintWriter(Files.newBufferedWriter(Paths.get(outputFile)));
         } catch (IOException e) {
-            e.printStackTrace();
+            System.out.println("Could not create output file " + outputFile);
+            throw new AppException(e);
         }
 
-        int totalCollectionFrequency = getTotalCollectionFrequency();
-        int totalDocumentFrequency = getTotalDocumentFrequency();
+        int totalCollectionFrequency = getTotalCollectionFrequency(collection);
+        int totalDocumentFrequency = getTotalDocumentFrequency(collection);
         Map<String,Integer> collectionFrequencies = getCollectionFrequencies(collection);
         Map<String,Integer> documentFrequencies = getDocumentFrequencies(collection);
 
         try {
-            if (type.equals("counts_ordered_gap")) {
-                Reader in = new FileReader(infile);
+            if (type.equals("counts_ordered_gap") || type.equals("counts_unordered_gap")) {
+                Reader in = new FileReader(inputFile);
                 Iterable<CSVRecord> records = CSVFormat.RFC4180.parse(in);
                 for (CSVRecord record : records) {
                     String first_term = record.get(0);
                     String second_term = record.get(1);
                     int index = Integer.parseInt(record.get(2));
                     int count = Integer.parseInt(record.get(3));
-                    Double answer = safe_log(count)
+                    double answer = safe_log(count)
                             + safe_log(totalCollectionFrequency)
                             - safe_log(collectionFrequencies.get(first_term))
                             - safe_log(collectionFrequencies.get(second_term));
@@ -133,7 +173,9 @@ public class MakeFeatureFiles {
                 throw new IllegalArgumentException("Invalid feature type requested: " + type);
             }
         } catch (IOException e) {
-            e.printStackTrace();
+            System.out.println("Exception while reading from " + inputFile + " and writing to "
+                         + outputFile);
+            throw new AppException(e);
         }
         pw.close();
     }

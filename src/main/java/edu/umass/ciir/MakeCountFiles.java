@@ -38,9 +38,7 @@ public class MakeCountFiles {
             if (curr_term.length() == 0) {
                 continue;
             }
-            if (!seenTerms.contains(curr_term)) {
-                seenTerms.add(curr_term);
-            }
+            seenTerms.add(curr_term);
             for (int j = Integer.max(0, i - max_half_window); j < Integer.min(numTerms, i + max_half_window + 1); ++j) {
                 String neighbor_term = terms[j];
                 int delta = i - j;
@@ -64,11 +62,9 @@ public class MakeCountFiles {
                             pairStats.add(outputLine);
                         }
                     } else {
-                        if (max_half_window + abs_delta != 0) {
-                            outputLine = doubleQuote + curr_term + doubleQuote + delimiter + doubleQuote + neighbor_term + doubleQuote
-                                    + delimiter + (max_half_window + abs_delta);
-                            pairStats.add(outputLine);
-                        }
+                        outputLine = doubleQuote + curr_term + doubleQuote + delimiter + doubleQuote + neighbor_term + doubleQuote
+                                + delimiter + (max_half_window + abs_delta);
+                        pairStats.add(outputLine);
                     }
                 }
                 if (type.equals("counts_unordered_inwindow")) {
@@ -103,15 +99,13 @@ public class MakeCountFiles {
         // CAREFUL -- all 4 of these will consume more than 850GB disk space.
         // I was able to run the first 2. Suggest running the next 2 individually.
 //        List<String> fileName = Arrays.asList("counts_ordered_gap","counts_unordered_gap","counts_unordered_inwindow","count_indoc");
-        List<String> fileName = Arrays.asList("counts_ordered_gap");
+        List<String> fileName = Arrays.asList("counts_unordered_gap");
         for (String f : fileName) {
             /* ...execute the task to run concurrently as a runnable: */
-            exec.execute(new Runnable() {
-                public void run() {
-                    /* do the work to be done in its own thread */
-                    System.out.println("Running in: " + Thread.currentThread());
-                    doOneType(collection, f);
-                }
+            exec.execute(() -> {
+                /* do the work to be done in its own thread */
+                System.out.println("Running in: " + Thread.currentThread());
+                doOneType(collection, f);
             });
         }
         /* Tell the executor that after these steps above, we will be done: */
@@ -127,12 +121,15 @@ public class MakeCountFiles {
 
     void doOneType(String collection, String type) {
         System.out.println("Doing " + type);
-        PrintWriter pw = null;
+
+        String outputFile = collection + "." + type + ".counts";
+
+        PrintWriter pw;
         try {
-            pw = new PrintWriter(Files.newBufferedWriter(
-                    Paths.get(collection + "." + type + ".counts")));
+            pw = new PrintWriter(Files.newBufferedWriter(Paths.get(outputFile)));
         } catch (IOException e) {
-            e.printStackTrace();
+            System.out.println("Could not create output file " + outputFile);
+            throw new AppException(e);
         }
 
         try (Stream<String> strm = Files.lines(Paths.get(collection)).parallel()) {
@@ -172,8 +169,7 @@ public class MakeCountFiles {
                 }
                 int numTerms = terms.length;
                 totalDocumentFrequency.incrementAndGet();
-                for (int i = 0; i < numTerms; ++i) {
-                    String curr_term = terms[i];
+                for (String curr_term : terms) {
                     if (curr_term.length() == 0) {
                         continue;
                     }
@@ -190,13 +186,16 @@ public class MakeCountFiles {
             e.printStackTrace();
         }
         // Now write out the selected frequency stats
-        PrintWriter pw = null;
+        String outputFile = collection + ".collection_frequencies.csv";
+
+        PrintWriter pw;
         try {
-            pw = new PrintWriter(Files.newBufferedWriter(
-                    Paths.get(collection + ".collection_frequencies.csv")));
+            pw = new PrintWriter(Files.newBufferedWriter(Paths.get(outputFile)));
         } catch (IOException e) {
-            e.printStackTrace();
+            System.out.println("Could not create output file " + outputFile);
+            throw new AppException(e);
         }
+
         for (Map.Entry<String,Integer> e : collection_frequencies.entrySet()) {
             String outputLine = doubleQuote + e.getKey() + doubleQuote + delimiter + e.getValue();
             pw.println(outputLine);
