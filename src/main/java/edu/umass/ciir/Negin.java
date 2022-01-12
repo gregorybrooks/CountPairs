@@ -16,13 +16,14 @@ public class Negin {
     public static void main (String[] args) {
 
         //String collection = "/u02/negin/shared/data/collectione-tokenized.tsv";
-        if (args.length != 2) {
-            throw new IllegalArgumentException("Arg 1 should be the pathname of the collection, arg 2 should be the operation--makeFeatureFiles or makeCountFiles");
+        if (args.length != 3) {
+            throw new IllegalArgumentException("Arg 1 should be the pathname of the collection, arg 2 should be the operation--makeFeatureFiles or makeCountFiles, arg 3 should be counts_ordered_gap, counts_unordered_gap, counts_unordered_inwindow or count_indoc");
         }
 
         String collection = args[0];
         String operation = args[1];
-        System.out.println("Processing collection " + collection + ", doing " + operation);
+        String featureType = args[2];
+        System.out.println("Processing collection " + collection + ", doing " + operation + ", feature " + featureType);
 
         /* The order of operations is: makeCountFiles, then import the CSV files into Postgres and create the grouped
            tables and export the grouped tables as CSV files, then do makeFeatureFiles, which outputs CSV files with
@@ -31,7 +32,7 @@ public class Negin {
         if (operation.equals("makeCountFiles")) {  // make the pre-grouped CSV files and the freq stats CSV files
             MakeCountFiles n = new MakeCountFiles();
             try {
-                n.featureizeWithStreams(collection);
+                n.featureizeWithStreams(collection, featureType);
                 n.gatherFrequencyStats(collection);
             } catch (Exception e) {
                 e.printStackTrace();
@@ -39,7 +40,7 @@ public class Negin {
         } else if (operation.equals("makeFeatureFiles")) {   // The grouped CSV files should be there
             MakeFeatureFiles f = new MakeFeatureFiles();
             try {
-                f.featureizeWithStreams(collection);
+                f.featureizeWithStreams(collection, featureType);
             } catch (Exception e) {
                 e.printStackTrace();
             }

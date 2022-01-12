@@ -15,7 +15,7 @@ public class MakeFeatureFiles {
     String delimiter = ",";
     String doubleQuote = "\"";
 
-    void featureizeWithStreams(String collection) {
+    void featureizeWithStreams(String collection, String featureType) {
 
         int numPartitions = 4;
 
@@ -23,7 +23,7 @@ public class MakeFeatureFiles {
 
         // CAREFUL -- Running all 4 of these concurrently will consume a lot of disk space.
 //        List<String> type = Arrays.asList("counts_ordered_gap","counts_unordered_gap","counts_unordered_inwindow","count_indoc");
-        List<String> type = Arrays.asList("counts_ordered_gap");
+        List<String> type = Arrays.asList(featureType);
         for (String f : type) {
             /* ...execute the task to run concurrently as a runnable: */
             exec.execute(() -> {

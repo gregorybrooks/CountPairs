@@ -91,7 +91,7 @@ public class MakeCountFiles {
         return pairStats;
     }
 
-    void featureizeWithStreams(String collection) {
+    void featureizeWithStreams(String collection, String featureType) {
         int numPartitions = 4;
 
         ExecutorService exec = Executors.newFixedThreadPool(numPartitions);
@@ -99,7 +99,7 @@ public class MakeCountFiles {
         // CAREFUL -- all 4 of these will consume more than 850GB disk space.
         // I was able to run the first 2. Suggest running the next 2 individually.
 //        List<String> fileName = Arrays.asList("counts_ordered_gap","counts_unordered_gap","counts_unordered_inwindow","count_indoc");
-        List<String> fileName = Arrays.asList("counts_unordered_gap");
+        List<String> fileName = Arrays.asList(featureType);
         for (String f : fileName) {
             /* ...execute the task to run concurrently as a runnable: */
             exec.execute(() -> {
