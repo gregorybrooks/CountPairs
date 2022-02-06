@@ -1,7 +1,5 @@
-/u02/negin/JavaVersion/src/main/java/edu/umass/ciir/Stats.java
+/u02/negin/JavaVersion/src/main/java/edu/umass/ciir/GalagoTokenizer.java
 /u02/negin/JavaVersion/src/main/java/edu/umass/ciir/AppException.java
 /u02/negin/JavaVersion/src/main/java/edu/umass/ciir/MakeCountFiles.java
-/u02/negin/JavaVersion/src/main/java/edu/umass/ciir/Derby.java
-/u02/negin/JavaVersion/src/main/java/edu/umass/ciir/FeatureStats.java
 /u02/negin/JavaVersion/src/main/java/edu/umass/ciir/MakeFeatureFiles.java
 /u02/negin/JavaVersion/src/main/java/edu/umass/ciir/Negin.java

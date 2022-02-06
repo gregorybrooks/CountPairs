@@ -1,5 +1,3 @@
-edu/umass/ciir/Derby$PairStat.class
-edu/umass/ciir/Derby$PairStatKey.class
-edu/umass/ciir/Derby$TermStat.class
-edu/umass/ciir/Derby$Pair.class
-edu/umass/ciir/Derby$StatTypes.class
+edu/umass/ciir/GalagoTokenizer$1.class
+edu/umass/ciir/GalagoTokenizer$StringStatus.class
+edu/umass/ciir/GalagoTokenizer.class

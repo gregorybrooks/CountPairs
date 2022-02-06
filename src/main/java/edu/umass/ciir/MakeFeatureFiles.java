@@ -52,11 +52,6 @@ public class MakeFeatureFiles {
         return Math.log(x);
     }
 
-    /*
-            totalCollectionFrequency,574008398
-        totalDocumentFrequency,8841823
-
-     */
     int getTotalCollectionFrequency(String collection) {
         int ret = 0;
         try {
@@ -170,12 +165,6 @@ public class MakeFeatureFiles {
                     pw.println(outputLine);
                 }
             } else if (type.equals("counts_unordered_inwindow")) {
-
-                /*
-                [self.safe_log(counts_unordered_inwindow[i]) + self.safe_log(cf) - self.safe_log(cf_x)
-                - self.safe_log(cf_y) - self.safe_log(i*2+1)
-                for i in range(len(counts_unordered_inwindow))]
-                 */
                     Reader in = new FileReader(inputFile);
                     Iterable<CSVRecord> records = CSVFormat.RFC4180.parse(in);
                     for (CSVRecord record : records) {
@@ -192,6 +181,27 @@ public class MakeFeatureFiles {
                                 + delimiter + index + delimiter + answer;
                         pw.println(outputLine);
                     }
+            } else if (type.equals("count_indoc")) {
+                /*
+                   feature_indoc = {k: safe_log(v) + safe_log(document_frequencies[''])
+                   - safe_log(document_frequencies[k[0]]) - safe_log(document_frequencies[k[1]])
+                   for k,v in count_indoc.items()}
+
+                 */
+                Reader in = new FileReader(inputFile);
+                Iterable<CSVRecord> records = CSVFormat.RFC4180.parse(in);
+                for (CSVRecord record : records) {
+                    String first_term = record.get(0);
+                    String second_term = record.get(1);
+                    int count = Integer.parseInt(record.get(3));
+                    double answer = safe_log(count)
+                            + safe_log(totalDocumentFrequency)
+                            - safe_log(documentFrequencies.get(first_term))
+                            - safe_log(documentFrequencies.get(second_term));
+                    String outputLine = doubleQuote + first_term + doubleQuote + delimiter + doubleQuote + second_term + doubleQuote
+                            + delimiter + answer;
+                    pw.println(outputLine);
+                }
             } else {
                 throw new IllegalArgumentException("Invalid feature type requested: " + type);
             }

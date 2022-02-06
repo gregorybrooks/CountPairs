@@ -17,7 +17,7 @@ public class Negin {
 
         //String collection = "/u02/negin/shared/data/collectione-tokenized.tsv";
         if (args.length != 3) {
-            throw new IllegalArgumentException("Arg 1 should be the pathname of the collection, arg 2 should be the operation--makeFeatureFiles or makeCountFiles, arg 3 should be counts_ordered_gap, counts_unordered_gap, counts_unordered_inwindow or count_indoc");
+            throw new IllegalArgumentException("Arg 1 should be the pathname of the collection, arg 2 should be the operation--makeFeatureFiles, makeCountFiles or makeFrequencyStatFiles, arg 3 should be counts_ordered_gap, counts_unordered_gap, counts_unordered_inwindow or count_indoc");
         }
 
         String collection = args[0];
@@ -25,27 +25,27 @@ public class Negin {
         String featureType = args[2];
         System.out.println("Processing collection " + collection + ", doing " + operation + ", feature " + featureType);
 
-        /* The order of operations is: makeCountFiles, then import the CSV files into Postgres and create the grouped
-           tables and export the grouped tables as CSV files, then do makeFeatureFiles, which outputs CSV files with
-           the "featureized" numbers
+        /* The order of operations is:
+           run this jar with operation=makeCountFiles (map step),
+           then import the CSV file created by makeCountFiles into Postgres and create the grouped table
+           and export the grouped table as a CSV files (reduce step),
+           then run this jar file with operation=makeFeatureFiles, which calculates the "feature" numbers and outputs a CSV file
          */
-        if (operation.equals("makeCountFiles")) {  // make the pre-grouped CSV files and the freq stats CSV files
-            MakeCountFiles n = new MakeCountFiles();
-            try {
-                n.featureizeWithStreams(collection, featureType);
-                n.gatherFrequencyStats(collection);
-            } catch (Exception e) {
-                e.printStackTrace();
+        try {
+            if (operation.equals("makeFrequencyStatFiles")) {   // collection, document and total frequency stats
+                MakeCountFiles run = new MakeCountFiles();
+                run.gatherFrequencyStats(collection);
+            } else if (operation.equals("makeCountFiles")) {  // make the un-grouped CSV files and the freq stats CSV files
+                MakeCountFiles run = new MakeCountFiles();
+                run.featureizeWithStreams(collection, featureType);
+            } else if (operation.equals("makeFeatureFiles")) {   // The grouped CSV files, created outside this program, must exist
+                MakeFeatureFiles run = new MakeFeatureFiles();
+                run.featureizeWithStreams(collection, featureType);
+            } else {
+                throw new IllegalArgumentException("Invalid operation: " + operation + ". Should be makeFeatureFiles, makeCountFiles or makeFrequencyStatFiles");
             }
-        } else if (operation.equals("makeFeatureFiles")) {   // The grouped CSV files should be there
-            MakeFeatureFiles f = new MakeFeatureFiles();
-            try {
-                f.featureizeWithStreams(collection, featureType);
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        } else {
-            throw new IllegalArgumentException("Invalid operation: " + operation + ". Should be makeFeatureFiles or makeCountFiles");
+        } catch (Exception e) {
+            throw new AppException(e);
         }
     }
 }

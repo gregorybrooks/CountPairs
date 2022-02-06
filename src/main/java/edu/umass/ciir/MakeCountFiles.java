@@ -4,6 +4,7 @@ import java.io.*;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -25,13 +26,8 @@ public class MakeCountFiles {
         Set<String> seenTerms = new HashSet<>();
         List<String> pairStats = new ArrayList<>();
         String[] parts = line.split("\t");
-        String[] terms = parts[1].split("[$«~¡¢£¤¥§©ª¬®°±³´µ¶·¹º»¼¿×æðø`&:!;\\-{} .,/()¦|'\"]+");
-
-        /* java's split() leaves an empty first array element if the sentence happens to start with one of the delimiters.
-           Remove it so we don't include pairs with the empty string. */
-        if (terms[0].length() == 0) {
-            terms = Arrays.copyOfRange(terms, 1, terms.length);
-        }
+        GalagoTokenizer tokenizer = new GalagoTokenizer();
+        String[] terms = tokenizer.parseLine(parts[1]);
         int numTerms = terms.length;
         for (int i = 0; i < numTerms; ++i) {
             String curr_term = terms[i];
@@ -142,42 +138,34 @@ public class MakeCountFiles {
         pw.close();
     }
 
-    void bumpCounter(Map<String,Integer> m, String term) {
-        if (m.containsKey(term)) {
-            int count = m.get(term);
-            m.put(term, count + 1);
-        } else {
-            m.put(term, 1);
-        }
-    }
-
     void gatherFrequencyStats(String collection) {
         AtomicInteger totalCollectionFrequency = new AtomicInteger();
         AtomicInteger totalDocumentFrequency = new AtomicInteger();
-        Map<String,Integer> collection_frequencies = new HashMap<>();
-        Map<String,Integer> document_frequencies = new HashMap<>();
-        try (Stream<String> strm = Files.lines(Paths.get(collection)).parallel()) {
+        Map<String,Integer> collection_frequencies = new ConcurrentHashMap<>();
+        Map<String,Integer> document_frequencies = new ConcurrentHashMap<>();
+        try (Stream<String> strm = Files.lines(Paths.get(collection)).parallel() ) {
             strm.forEach(line -> {
-                Set<String> seenTerms = new HashSet<>();
-                String[] parts = line.split("\t");
-                String[] terms = parts[1].split("[$«~¡¢£¤¥§©ª¬®°±³´µ¶·¹º»¼¿×æðø`&:!;\\-{} .,/()¦|'\"]+");
 
-        /* java's split() leaves an empty first array element if the sentence happens to start with one of the delimiters.
-           Remove it so we don't include pairs with the empty string. */
-                if (terms[0].length() == 0) {
-                    terms = Arrays.copyOfRange(terms, 1, terms.length);
-                }
-                int numTerms = terms.length;
+//                Set<String> seenTerms = new HashSet<>();
+                ConcurrentHashMap<String, Integer> map = new ConcurrentHashMap<>();
+                Set<String> seenTerms = map.newKeySet();
+
+                String[] parts = line.split("\t");
+                GalagoTokenizer tokenizer = new GalagoTokenizer();
+                String[] terms = tokenizer.parseLine(parts[1]);
                 totalDocumentFrequency.incrementAndGet();
                 for (String curr_term : terms) {
+//                    if (curr_term.equals("fingertips")) {
+//                        System.out.println(parts[0]);
+//                    }
                     if (curr_term.length() == 0) {
                         continue;
                     }
-                    bumpCounter(collection_frequencies, curr_term);
+                    collection_frequencies.merge(curr_term, 1, Integer::sum);
                     totalCollectionFrequency.incrementAndGet();
 
                     if (!seenTerms.contains(curr_term)) {
-                        bumpCounter(document_frequencies, curr_term);
+                        document_frequencies.merge(curr_term, 1, Integer::sum);
                         seenTerms.add(curr_term);
                     }
                 }
