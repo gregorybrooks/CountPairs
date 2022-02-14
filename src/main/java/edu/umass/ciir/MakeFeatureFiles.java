@@ -193,7 +193,7 @@ public class MakeFeatureFiles {
                 for (CSVRecord record : records) {
                     String first_term = record.get(0);
                     String second_term = record.get(1);
-                    int count = Integer.parseInt(record.get(3));
+                    int count = Integer.parseInt(record.get(2));
                     double answer = safe_log(count)
                             + safe_log(totalDocumentFrequency)
                             - safe_log(documentFrequencies.get(first_term))
