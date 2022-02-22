@@ -36,8 +36,12 @@ public class Negin {
                 MakeCountFiles run = new MakeCountFiles();
                 run.gatherFrequencyStats(collection);
             } else if (operation.equals("makeCountFiles")) {  // make the un-grouped CSV files and the freq stats CSV files
-                MakeCountFiles run = new MakeCountFiles();
-                run.featureizeWithStreams(collection, featureType);
+//                MakeCountFiles run = new MakeCountFiles();
+//                run.featureizeWithStreams(collection, featureType);
+                MapReduce mp = new MapReduce(featureType, collection, collection + "." + featureType + ".features.csv");
+                if (mp.runJob1()) {
+                    mp.runJob2();
+                }
             } else if (operation.equals("makeFeatureFiles")) {   // The grouped CSV files, created outside this program, must exist
                 MakeFeatureFiles run = new MakeFeatureFiles();
                 run.featureizeWithStreams(collection, featureType);

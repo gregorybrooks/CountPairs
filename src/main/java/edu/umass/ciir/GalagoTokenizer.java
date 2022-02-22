@@ -1,7 +1,5 @@
 package edu.umass.ciir;
 
-import com.sun.tools.classfile.Synthetic_attribute;
-
 import java.util.ArrayList;
 import java.util.List;
 
