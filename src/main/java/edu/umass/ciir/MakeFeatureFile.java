@@ -21,19 +21,17 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import static java.lang.Math.abs;
 
 public class MakeFeatureFile {
-    private Configuration conf;
-    private Job job;
-    private Job job2;
-    private String type;
+    private final Configuration conf;
+    private final String type;
     private String job1OutputFile;
     private String finalOutputFile;
-    private String inputFile;
-    private String outputFile;
+    private final String inputFile;
+    private final String outputFile;
 
     public static class TokenizerMapper extends Mapper<Object, Text, Text, IntWritable> {
 
         private static final IntWritable one = new IntWritable(1);
-        private Text word = new Text();
+        private static final Text word = new Text();
         private static final String delimiter = ",";
         private static final int max_half_window = 5;
 
@@ -106,16 +104,16 @@ public class MakeFeatureFile {
     public static class GrouperMapper extends Mapper<Object, Text, Text, DoubleWritable> {
         private static int totalCollectionFrequency;
         private static int totalDocumentFrequency;
-        private static Map<String,Integer> collectionFrequencies;
-        private static Map<String,Integer> documentFrequencies;
+        private static final Map<String,Integer> collectionFrequencies;
+        private static final Map<String,Integer> documentFrequencies;
         // This has to be hard-coded for now since it is used even before the main() method is executed.
         // Later we could make it get the name from an env variable.
-        private static String inputFile = "/mnt/scratch/hadoop/hadoop-3.3.1/collectione-tokenized.tsv";
-        private Text text = new Text();
+        private static final String inputFile = "/mnt/scratch/hadoop/hadoop-3.3.1/collectione-tokenized.tsv";
+        private final Text text = new Text();
 
         private static final String delimiter = ",";
 
-        public static int getTotalFrequencies(String collection) {
+        public static void getTotalFrequencies(String collection) {
             int ret = 0;
             try {
                 String fname = collection + ".total_frequencies.csv";
@@ -133,7 +131,6 @@ public class MakeFeatureFile {
             } catch (IOException e) {
                 throw new AppException(e);
             }
-            return ret;
         }
 
         public static Map<String,Integer> getDocumentFrequencies(String collection) {
@@ -243,7 +240,7 @@ public class MakeFeatureFile {
     }
 
     public static class IntSumReducer extends Reducer<Text,IntWritable,Text,IntWritable> {
-        private IntWritable result = new IntWritable();
+        private final IntWritable result = new IntWritable();
 
         public void reduce(Text key, Iterable<IntWritable> values, Context context
             ) throws IOException, InterruptedException {
@@ -257,7 +254,7 @@ public class MakeFeatureFile {
     }
 
     public static class DoubleSumReducer extends Reducer<Text,DoubleWritable,Text,DoubleWritable> {
-        private DoubleWritable result = new DoubleWritable();
+        private final DoubleWritable result = new DoubleWritable();
 
         public void reduce(Text key, Iterable<DoubleWritable> values, Context context
         ) throws IOException, InterruptedException {
@@ -289,7 +286,7 @@ public class MakeFeatureFile {
      * @throws ClassNotFoundException
      */
     public boolean runJob1() throws IOException, InterruptedException, ClassNotFoundException {
-        job = Job.getInstance(conf, type);
+        Job job = Job.getInstance(conf, type);
         job.setJarByClass(MakeFeatureFile.class);
         job.setMapperClass(TokenizerMapper.class);
         job.setReducerClass(IntSumReducer.class);
@@ -317,7 +314,7 @@ public class MakeFeatureFile {
      * @throws ClassNotFoundException
      */
     public boolean runJob2() throws IOException, InterruptedException, ClassNotFoundException {
-        job2 = Job.getInstance(conf, type);
+        Job job2 = Job.getInstance(conf, type);
         job2.setJarByClass(MakeFeatureFile.class);
         job2.setMapperClass(GrouperMapper.class);
         job2.setReducerClass(DoubleSumReducer.class);
