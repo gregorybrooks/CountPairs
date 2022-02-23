@@ -1,5 +1,9 @@
 package edu.umass.ciir;
 
+/* I copied this from Galago, because I want the tokenizing to be the same as that done by Galago with the
+   exception of how '#' is handled.
+ */
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -55,7 +59,6 @@ public class GalagoTokenizer {
 
     public String[] parseLine(String line) {
         // main parsing loop.
-//        System.out.println("Line: " + line);
         finalTokens.clear();
         text = line;
         position = 0;
@@ -68,7 +71,6 @@ public class GalagoTokenizer {
             }
         }
 
-//        System.out.println("Length of term list: " + finalTokens.size());
         return finalTokens.stream()
                 .toArray(String[]::new);
     }
@@ -83,7 +85,6 @@ public class GalagoTokenizer {
     }
 
     public void processToken(String token) {
-//        System.out.println("Token: " + token);
         StringStatus status = checkTokenStatus(token);
 
         switch (status) {
@@ -106,7 +107,6 @@ public class GalagoTokenizer {
 
         if (status != StringStatus.NeedsAcronymProcessing) {
             if (token.length() > 0) {
-//                System.out.println("Adding token: " + token);
                 finalTokens.add(token);
             }
         }
@@ -257,4 +257,3 @@ public class GalagoTokenizer {
         }
     }
 }
-

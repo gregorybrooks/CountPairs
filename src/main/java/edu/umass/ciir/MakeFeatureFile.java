@@ -20,34 +20,31 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 
 import static java.lang.Math.abs;
 
-public class MapReduce {
+public class MakeFeatureFile {
     private Configuration conf;
     private Job job;
     private Job job2;
     private String type;
     private String job1OutputFile;
     private String finalOutputFile;
-    private int totalCollectionFrequency;
-    private int totalDocumentFrequency;
-    private final String delimiter = ",";
-    private Map<String,Integer> collectionFrequencies;
-    private Map<String,Integer> documentFrequencies;
     private String inputFile;
     private String outputFile;
 
     public static class TokenizerMapper extends Mapper<Object, Text, Text, IntWritable> {
 
-        private final static IntWritable one = new IntWritable(1);
+        private static final IntWritable one = new IntWritable(1);
         private Text word = new Text();
+        private static final String delimiter = ",";
+        private static final int max_half_window = 5;
 
-        public void map(Object key, Text value, Mapper.Context context
-        ) throws IOException, InterruptedException {
-            String type = context.getJobName();
-            String delimiter = ",";
+        public void map(Object key, Text value, Mapper.Context context) throws IOException, InterruptedException {
+            String type = context.getJobName();  // trick: passing the feature type as the job name
+            if (!(type.equals("counts_unordered_gap") || type.equals("counts_ordered_gap") ||
+                  type.equals("counts_unordered_inwindow") || type.equals("count_indoc"))) {
+                throw new AppException("Invalid feature type: " + type);
+            }
             String line = value.toString();
-            int max_half_window = 5;
             Set<String> seenTerms = new HashSet<>();
-            List<String> pairStats = new ArrayList<>();
             String[] parts = line.split("\t");
             GalagoTokenizer tokenizer = new GalagoTokenizer();
             String[] terms = tokenizer.parseLine(parts[1]);
@@ -62,7 +59,6 @@ public class MapReduce {
                     String neighbor_term = terms[j];
                     int delta = i - j;
                     int abs_delta = abs(delta);
-
                     String outputLine;
 
                     if (type.equals("counts_unordered_gap")) {
@@ -72,9 +68,7 @@ public class MapReduce {
                             word.set(outputLine);
                             context.write(word, one);
                         }
-                    }
-
-                    if (type.equals("counts_ordered_gap")) {
+                    } else if (type.equals("counts_ordered_gap")) {
                         if (delta >= 0) {
                             if (delta != 0) {
                                 outputLine = curr_term + delimiter + neighbor_term + delimiter + delta;
@@ -86,8 +80,7 @@ public class MapReduce {
                             word.set(outputLine);
                             context.write(word, one);
                         }
-                    }
-                    if (type.equals("counts_unordered_inwindow")) {
+                    } else if (type.equals("counts_unordered_inwindow")) {
                         for (int k = abs_delta; k < max_half_window + 1; ++k) {
                             if (k != 0) {
                                 outputLine = curr_term + delimiter + neighbor_term + delimiter + k;
@@ -98,7 +91,6 @@ public class MapReduce {
                     }
                 }
             }
-
             if (type.equals("count_indoc")) {
                 for (String term1 : seenTerms) {
                     for (String term2 : seenTerms) {
@@ -116,11 +108,14 @@ public class MapReduce {
         private static int totalDocumentFrequency;
         private static Map<String,Integer> collectionFrequencies;
         private static Map<String,Integer> documentFrequencies;
+        // This has to be hard-coded for now since it is used even before the main() method is executed.
+        // Later we could make it get the name from an env variable.
         private static String inputFile = "/mnt/scratch/hadoop/hadoop-3.3.1/collectione-tokenized.tsv";
+        private Text text = new Text();
 
         private static final String delimiter = ",";
 
-        public static int getTotalCollectionFrequency(String collection) {
+        public static int getTotalFrequencies(String collection) {
             int ret = 0;
             try {
                 String fname = collection + ".total_frequencies.csv";
@@ -130,36 +125,13 @@ public class MapReduce {
                     String type = record.get(0);
                     int count = Integer.parseInt(record.get(1));
                     if (type.equals("totalCollectionFrequency")) {
-                        ret = count;
+                        totalCollectionFrequency = count;
+                    } else if (type.equals("totalDocumentFrequency")) {
+                        totalDocumentFrequency = count;
                     }
                 }
-                if (ret == 0) {
-                    throw new IllegalArgumentException("totalCollectionFrequency not found in " + fname);
-                }
             } catch (IOException e) {
-                e.printStackTrace();
-            }
-            return ret;
-        }
-
-        public static int getTotalDocumentFrequency(String collection) {
-            int ret = 0;
-            try {
-                String fname = collection + ".total_frequencies.csv";
-                Reader in = new FileReader(fname);
-                Iterable<CSVRecord> records = CSVFormat.RFC4180.parse(in);
-                for (CSVRecord record : records) {
-                    String type = record.get(0);
-                    int count = Integer.parseInt(record.get(1));
-                    if (type.equals("totalDocumentFrequency")) {
-                        ret = count;
-                    }
-                }
-                if (ret == 0) {
-                    throw new IllegalArgumentException("totalDocumentFrequency not found in " + fname);
-                }
-            } catch (IOException e) {
-                e.printStackTrace();
+                throw new AppException(e);
             }
             return ret;
         }
@@ -175,7 +147,7 @@ public class MapReduce {
                     documentFrequencies.put(term, count);
                 }
             } catch (IOException e) {
-                e.printStackTrace();
+                throw new AppException(e);
             }
             return documentFrequencies;
         }
@@ -191,79 +163,86 @@ public class MapReduce {
                     collectionFrequencies.put(term, count);
                 }
             } catch (IOException e) {
-                e.printStackTrace();
+                throw new AppException(e);
             }
             return collectionFrequencies;
         }
 
+        /* To calculate the features, we need some corpus statistics. These have been previously calculated
+           and exist in files in the current directory. To pass the stats to the GrouperMapper's map() method,
+           we read the files in when the class comes to life:
+         */
         static {
-            totalCollectionFrequency = getTotalCollectionFrequency(inputFile);
-            totalDocumentFrequency = getTotalDocumentFrequency(inputFile);
+            getTotalFrequencies(inputFile);
             collectionFrequencies = getCollectionFrequencies(inputFile);
             documentFrequencies = getDocumentFrequencies(inputFile);
         }
 
-        public void map(Object key, Text value, Mapper.Context context
-                      ) throws IOException, InterruptedException {
-        DoubleWritable result = new DoubleWritable();
-        String type = context.getJobName();
-        String line = value.toString();
-        String[] terms = line.split(",");
-        if (terms.length < 2) {
-            throw new IllegalArgumentException("Less than 2 terms in key: " + key);
+        public void map(Object key, Text value, Mapper.Context context) throws IOException, InterruptedException {
+            DoubleWritable result = new DoubleWritable();
+            String type = context.getJobName();  // trick: passing the feature type as the job name
+            if (!(type.equals("counts_unordered_gap") || type.equals("counts_ordered_gap") ||
+                    type.equals("counts_unordered_inwindow") || type.equals("count_indoc"))) {
+                throw new AppException("Invalid feature type: " + type);
+            }
+            String line = value.toString();
+            String[] terms = line.split(",");
+            if (terms.length < 2) {
+                throw new IllegalArgumentException("Less than 2 terms in key: " + key);
+            }
+
+            if (type.equals("counts_ordered_gap") || type.equals("counts_unordered_gap")) {
+                String first_term = terms[0];
+                String second_term = terms[1];
+                int index = Integer.parseInt(terms[2]);
+                int count = Integer.parseInt(terms[3]);
+                double answer = safe_log(count)
+                        + safe_log(totalCollectionFrequency)
+                        - safe_log(collectionFrequencies.get(first_term))
+                        - safe_log(collectionFrequencies.get(second_term));
+                String outputLine = first_term + delimiter + second_term
+                        + delimiter + index;
+                result.set(answer);
+                text.set(outputLine);
+                context.write(text, result);
+            } else if (type.equals("counts_unordered_inwindow")) {
+                String first_term = terms[0];
+                String second_term = terms[1];
+                int index = Integer.parseInt(terms[2]);
+                int count = Integer.parseInt(terms[3]);
+                double answer = safe_log(count)
+                        + safe_log(totalCollectionFrequency)
+                        - safe_log(collectionFrequencies.get(first_term))
+                        - safe_log(collectionFrequencies.get(second_term))
+                        - safe_log(index * 2 + 1);
+                String outputLine = first_term + delimiter + second_term
+                        + delimiter + index;
+                result.set(answer);
+                text.set(outputLine);
+                context.write(text, result);
+            } else if (type.equals("count_indoc")) {
+                String first_term = terms[0];
+                String second_term = terms[1];
+                int count = Integer.parseInt(terms[2]);
+                double answer = safe_log(count)
+                        + safe_log(totalDocumentFrequency)
+                        - safe_log(documentFrequencies.get(first_term))
+                        - safe_log(documentFrequencies.get(second_term));
+                String outputLine = first_term + delimiter + second_term;
+                result.set(answer);
+                text.set(outputLine);
+                context.write(text, result);
+            }
         }
 
-        if (type.equals("counts_ordered_gap") || type.equals("counts_unordered_gap")) {
-            String first_term = terms[0];
-            String second_term = terms[1];
-            int index = Integer.parseInt(terms[2]);
-            int count = Integer.parseInt(terms[3]);
-            double answer = safe_log(count)
-                    + safe_log(totalCollectionFrequency)
-                    - safe_log(collectionFrequencies.get(first_term))
-                    - safe_log(collectionFrequencies.get(second_term));
-            String outputLine = first_term + delimiter + second_term
-                    + delimiter + index;
-            result.set(answer);
-            context.write(new Text(outputLine), result);
-        } else if (type.equals("counts_unordered_inwindow")) {
-            String first_term = terms[0];
-            String second_term = terms[1];
-            int index = Integer.parseInt(terms[2]);
-            int count = Integer.parseInt(terms[3]);
-            double answer = safe_log(count)
-                    + safe_log(totalCollectionFrequency)
-                    - safe_log(collectionFrequencies.get(first_term))
-                    - safe_log(collectionFrequencies.get(second_term))
-                    - safe_log(index * 2 + 1);
-            String outputLine = first_term + delimiter + second_term
-                    + delimiter + index;
-            result.set(answer);
-            context.write(new Text(outputLine), result);
-        } else if (type.equals("count_indoc")) {
-            String first_term = terms[0];
-            String second_term = terms[1];
-            int count = Integer.parseInt(terms[2]);
-            double answer = safe_log(count)
-                    + safe_log(totalDocumentFrequency)
-                    - safe_log(documentFrequencies.get(first_term))
-                    - safe_log(documentFrequencies.get(second_term));
-            String outputLine = first_term + delimiter + second_term;
-            result.set(answer);
-            context.write(new Text(outputLine), result);
-        } else {
-            throw new IllegalArgumentException("Invalid feature type requested: " + type);
+        private Double safe_log (Integer x) {
+            if (x == 0)
+                return 0.0;
+            return Math.log(x);
         }
     }
 
-    private Double safe_log (Integer x) {
-        if (x == 0)
-            return 0.0;
-        return Math.log(x);
-    }
-}
-
-public static class IntSumReducer extends Reducer<Text,IntWritable,Text,IntWritable> {
+    public static class IntSumReducer extends Reducer<Text,IntWritable,Text,IntWritable> {
         private IntWritable result = new IntWritable();
 
         public void reduce(Text key, Iterable<IntWritable> values, Context context
@@ -291,70 +270,7 @@ public static class IntSumReducer extends Reducer<Text,IntWritable,Text,IntWrita
         }
     }
 
-    public class FeatureReducer extends Reducer<Text,DoubleWritable,Text,DoubleWritable> {
-        private DoubleWritable result = new DoubleWritable();
-
-        public void reduce(Text key, Iterable<IntWritable> values, Context context
-        ) throws IOException, InterruptedException {
-            String type = context.getJobName();
-            String line = key.toString();
-            String[] terms = line.split(",");
-            if (terms.length < 2) {
-                throw new IllegalArgumentException("Less than 2 terms in key: " + key);
-            }
-            int count = 0;
-            int numItems = 0;
-            for (IntWritable val : values) {   // at this point there should only be 1 value in this list
-                ++numItems;
-                count += val.get();
-            }
-            if (numItems > 1) {
-                throw new IllegalArgumentException("More than one value passed to final reducer for key: " + key);
-            }
-
-            if (type.equals("counts_ordered_gap") || type.equals("counts_unordered_gap")) {
-                String first_term = terms[0];
-                String second_term = terms[1];
-                double answer = safe_log(count)
-                        + safe_log(totalCollectionFrequency)
-                        - safe_log(collectionFrequencies.get(first_term))
-                        - safe_log(collectionFrequencies.get(second_term));
-                result.set(answer);
-                context.write(key, result);
-            } else if (type.equals("counts_unordered_inwindow")) {
-                String first_term = terms[0];
-                String second_term = terms[1];
-                int index = Integer.parseInt(terms[2]);
-                double answer = safe_log(count)
-                        + safe_log(totalCollectionFrequency)
-                        - safe_log(collectionFrequencies.get(first_term))
-                        - safe_log(collectionFrequencies.get(second_term))
-                        - safe_log(index * 2 + 1);
-                result.set(answer);
-                context.write(key, result);
-            } else if (type.equals("count_indoc")) {
-                String first_term = terms[0];
-                String second_term = terms[1];
-                double answer = safe_log(count)
-                        + safe_log(totalDocumentFrequency)
-                        - safe_log(documentFrequencies.get(first_term))
-                        - safe_log(documentFrequencies.get(second_term));
-                result.set(answer);
-                context.write(key, result);
-            } else {
-                throw new IllegalArgumentException("Invalid feature type requested: " + type);
-            }
-        }
-    }
-
-    private Double safe_log (Integer x) {
-        if (x == 0)
-            return 0.0;
-        return Math.log(x);
-    }
-
-    public MapReduce(String type, String inputFile, String outputFile) throws Exception {
-
+    public MakeFeatureFile(String type, String inputFile, String outputFile) {
         this.type = type;
         conf = new Configuration();
         conf.set("mapred.textoutputformat.separator", ",");
@@ -362,11 +278,20 @@ public static class IntSumReducer extends Reducer<Text,IntWritable,Text,IntWrita
         this.outputFile = outputFile;
     }
 
+    /**
+     * Runs a map-reduce job that maps the lines in the corpus to word-pair statistics,
+     * depending on the type of statistic passed as the 'type' argument to the MapReduce constructor.
+     * Before running this program, put the corpus file into the home directory of your HDFS file system like this:
+     *     hdfs dfs -put collectione-tokenized.tsv
+     * @return true if all went well, else false
+     * @throws IOException
+     * @throws InterruptedException
+     * @throws ClassNotFoundException
+     */
     public boolean runJob1() throws IOException, InterruptedException, ClassNotFoundException {
         job = Job.getInstance(conf, type);
-        job.setJarByClass(MapReduce.class);
+        job.setJarByClass(MakeFeatureFile.class);
         job.setMapperClass(TokenizerMapper.class);
-        //job.setCombinerClass(IntSumReducer.class);
         job.setReducerClass(IntSumReducer.class);
 
         job.setOutputKeyClass(Text.class);
@@ -379,11 +304,22 @@ public static class IntSumReducer extends Reducer<Text,IntWritable,Text,IntWrita
         return job.waitForCompletion(true);
     }
 
+    /**
+     * Runs a map-reduce job that calculates the "feature" statistic for each word-pair statistic produced by the
+     * first map-reduce job (see above). The feature that is calculated depends on the 'type' argument that was passed
+     * to the MapReduce constructor.
+     * The final file appears as the file 'part-r-00000' in the HDFS directory whose name is the outputFile arg passed
+     * to the MapReduce constructor. To get the file to your local file system you would do:
+     *     hdfs dfs -get collectione-tokenized.tsv.counts_ordered_gap.features.csv/part-r-00000
+     * @return true if all went well, else false
+     * @throws IOException
+     * @throws InterruptedException
+     * @throws ClassNotFoundException
+     */
     public boolean runJob2() throws IOException, InterruptedException, ClassNotFoundException {
         job2 = Job.getInstance(conf, type);
-        job2.setJarByClass(MapReduce.class);
+        job2.setJarByClass(MakeFeatureFile.class);
         job2.setMapperClass(GrouperMapper.class);
-        //job2.setCombinerClass(IntSumReducer.class);
         job2.setReducerClass(DoubleSumReducer.class);
 
         job2.setOutputKeyClass(Text.class);
